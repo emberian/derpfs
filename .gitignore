@@ -1,0 +1,4 @@
+*.s
+*.swp
+# name of binary
+derpfs
