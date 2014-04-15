@@ -2,7 +2,9 @@
 
 use std;
 
-type Offset = u64;
+use Offset;
+use StrId;
+use Id;
 
 pub struct Magic {
     /// "derpfs!!"
@@ -31,6 +33,19 @@ pub struct Metadata {
     string_map: Offset,
     free_map: Offset,
     root: Offset,
+}
+
+impl Metadata {
+    pub fn save(&self, &mut std::io::BufWriter) {
+        wr.write_le_u64(self.size);
+        wr.write_le_u64(self.flags); // no flags
+        wr.write_le_u64(self.num_ids)
+        wr.write_le_u64(self.id_map.val());
+        wr.write_le_u64(self.num_strings);
+        wr.write_le_u64(self.string_map.val());
+        wr.write_le_u64(self.free_map.val());
+        wr.write_le_u64(self.root.val());
+    }
 }
 
 pub struct EntityListHeader {

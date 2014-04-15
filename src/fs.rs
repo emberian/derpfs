@@ -2,30 +2,18 @@ use std::os::{MemoryMap, MapReadable, MapWritable, MapFd};
 use std::iter::range_inclusive;
 use std::mem::size_of;
 
+use Offset;
+use StrId;
+use Id;
+
 use bitmap::Bitmap;
 use uuid::Uuid;
 use wsize;
 use libc;
 
-macro_rules! opaque (
-    ($name:ident) => (
-        pub struct $ident(u64);
-        impl $ident {
-            pub fn new(v: u64) -> $ident {
-                $ident(v)
-            }
+use fuse::{Request, ReplyDirectory, ReplyEntry, ReplyEmpty, ReplyOpen, ReplyData, ReplyWrite};
+use fuse;
 
-            pub fn val(&self) -> u64 {
-                let $ident(v) = *self;
-                v
-            }
-        }
-    )
-)
-
-opaque!(Id)
-opaque!(Offset)
-opaque!(StrId)
 
 pub struct Filesystem {
     uuid: Uuid,
@@ -41,6 +29,7 @@ pub struct Filesystem {
 
 pub struct Entity {
     id: Id,
+    parent: Id,
     owner: u64,
     group: u64,
     attrs: u64,
@@ -55,6 +44,7 @@ impl Entity {
     fn new_raw() -> Entity {
         Entity {
             id: Id::new(0),
+            parent: Id::new(0),
             owner: 0,
             group: 0,
             flags: 0,
@@ -62,7 +52,7 @@ impl Entity {
             length: 0,
             contents: ~[],
             children: ~[],
-            perms: 0
+            perms: 0,
         }
     }
 }
@@ -129,8 +119,17 @@ impl Filesystem {
             blockmap: bitmap,
             ids: idmap,
             strmap: strmap,
-            size: size,
-            disk: map
+            disk: map,
+            meta: disk::Metadata {
+                size: size,
+                flags: 0,
+                num_ids: 1,
+                id_map: Offset::new(0),
+                num_strings: 0,
+                string_map: Offset::new(0),
+                free_map: Offset::new(0),
+                root: Offset::new(0)
+            },
         };
         fs.create();
         Some(fs)
@@ -140,7 +139,7 @@ impl Filesystem {
     fn create(&mut self) {
         static MAGIC: &'static [u8] = bytes!("derpfs!!");
 
-        let mut buf: &mut [u8] = unsafe { std::cast::transmute( std::raw::Slice { data: self.map.data as *u8, len: self.size } ) };
+        let mut buf = mk_slice(self.disk.data, 0, self.meta.size);
 
         let mut wr = std::io::BufWriter::new(buf);
 
@@ -152,7 +151,6 @@ impl Filesystem {
         // write out the superblock
         wr.write(MAGIC);
         wr.write(self.uuid.as_bytes());
-        wr.write_le_u64(0); // flags NYI
 
         // how long are the maps going to be?
         let bitmap_size = block_size(self.bitmap.byte_len(), 4096);
@@ -167,11 +165,28 @@ impl Filesystem {
             self.bitmap.set(i, 0b01);
         }
 
-        // save all that
-        wr.write_le_u64(self.ids.len());
-        wr.write_le_u64(2);
-        wr.write_le_u64(self.strmap.len());
-        wr.write_le_u64(2 + idmap_size);
-        wr.write_le_u64(2 + idmap_size + strmap_size);
+        self.meta.id_map = Offset::new(2);
+        self.meta.string_map = Offset::new(2 + idmap_size);
+        self.meta.free_map = Offset::new(2 + idmap_size + strmap_size);
+        self.meta.root = Offset::new(2 + idmap_size + strmap_size + bitmap_size);
+        self.meta.flags = 1 << 63; // "dirty"
+
+        self.meta.save(&mut wr);
+    }
+}
+
+impl fuse::Filesystem for Filesystem {
+    fn destroy(&mut self, _req: &Request) {
+        self.save();
+        self.meta.flags &= !(1 << 63); // mark clean
+        self.meta.save(&mut std::io::BufWriter::new(mk_slice(self.disk.data, 24, self.meta.size,)));
+    }
+
+    fn opendir(&mut self, _req: &Request, inode: u64, _flags: uint, reply: ReplyOpen) {
+        reply.opened(inode, 0);
+    }
+
+    fn readdir(&mut self, _req: &Request, inode: u64, _fh: u64, offset: u64, reply: ReplyDirectory) {
+        if !self.ids.contains(&inode) { reply.error(-libc::ENOENT); return }
     }
 }

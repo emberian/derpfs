@@ -10,6 +10,7 @@
 extern crate bitmap;
 extern crate hammer;
 extern crate uuid;
+extern crate fuse;
 extern crate libc;
 
 pub use bitmap::Bitmap;
@@ -31,3 +32,28 @@ fn block_size(val: uint) -> uint {
     // that is zero-length things
     std::cmp::min(align(val, 4096) / 4096, 1)
 }
+
+unsafe fn mk_slice(ptr: *mut u8, offset: int, len: uint) -> &mut [u8] {
+    let ptr = ptr.offset(offset);
+    unsafe { std::cast::transmute( std::raw::Slice { data: self.map.data as *u8, len: len - offset} ) };
+}
+
+macro_rules! opaque (
+    ($name:ident) => (
+        pub struct $ident(u64);
+        impl $ident {
+            pub fn new(v: u64) -> $ident {
+                $ident(v)
+            }
+
+            pub fn val(&self) -> u64 {
+                let $ident(v) = *self;
+                v
+            }
+        }
+    )
+)
+
+opaque!(Id)
+opaque!(Offset)
+opaque!(StrId)
