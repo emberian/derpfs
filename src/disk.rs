@@ -4,11 +4,15 @@ use std;
 
 type Offset = u64;
 
-/// Describes the filesystem
-pub struct DerpMetadata {
+pub struct Magic {
     /// "derpfs!!"
     magic: [u8, ..8],
     uuid: [u8, ..16],
+}
+
+/// Describes the filesystem
+pub struct Metadata {
+    size: u64,
     /// --MS--
     /// 2: state (00 = clean, 01 = dirty, 10 = error, 11 = recover
     /// 2: error handling (00 = ignore, 01 = remount ro, 10 = bail, 11 = log + ignore)
@@ -21,20 +25,20 @@ pub struct DerpMetadata {
     /// .
     /// --LS--
     flags: u64,
+    num_ids: u64,
     id_map: Offset,
+    num_strings: u64,
     string_map: Offset,
     free_map: Offset,
-    root_elist: Offset,
-
+    root: Offset,
 }
 
 pub struct EntityListHeader {
     id: u64,
     owner: u64,
     group: u64,
-    perm: u16,
-    flags: u16,
-    _reserved0: u32,
+    perm: u32,
+    flags: u32,
     attrs: V<u64>,
     dirlen: V<u64>,
     conlen: V<u64>,
@@ -64,7 +68,7 @@ pub struct V<T> {
 
 #[test]
 fn size_of_types() {
-    // not hurt by padding
+    // not hurt by padding etc
     assert_eq!(std::mem::size_of::<DerpMetadata>(), 64);
     assert_eq!(std::mem::size_of::<EntityListHeader>(), (8 * 7));
 }
