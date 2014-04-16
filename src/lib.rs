@@ -1,5 +1,4 @@
 #![crate_id = "derpfs"]
-#![crate_type = "rlib"]
 #![crate_type = "bin"]
 #![feature(phase, macro_rules, log_syntax, trace_macros)]
 
@@ -7,6 +6,7 @@
 
 #[phase(syntax, link)] extern crate log;
 
+extern crate collections;
 extern crate bitmap;
 extern crate hammer;
 extern crate uuid;
@@ -27,27 +27,28 @@ fn align(val: uint, align: uint) -> uint {
     val + (val % align)
 }
 
-fn block_size(val: uint) -> uint {
+fn block_size(val: uint) -> u64 {
     // always have at least one block so we don't need to deal with the mess
     // that is zero-length things
-    std::cmp::min(align(val, 4096) / 4096, 1)
+    std::cmp::min(align(val, 4096) / 4096, 1) as u64
 }
 
 unsafe fn mk_slice(ptr: *mut u8, offset: int, len: uint) -> &mut [u8] {
     let ptr = ptr.offset(offset);
-    unsafe { std::cast::transmute( std::raw::Slice { data: self.map.data as *u8, len: len - offset} ) };
+    unsafe { std::cast::transmute( std::raw::Slice { data: ptr as *u8, len: len - offset as uint} ) }
 }
 
 macro_rules! opaque (
     ($name:ident) => (
-        pub struct $ident(u64);
-        impl $ident {
-            pub fn new(v: u64) -> $ident {
-                $ident(v)
+        #[deriving(Show, TotalEq, Eq, Clone, TotalOrd, Ord, Hash)]
+        pub struct $name(u64);
+        impl $name {
+            pub fn new(v: u64) -> $name {
+                $name(v)
             }
 
             pub fn val(&self) -> u64 {
-                let $ident(v) = *self;
+                let $name(v) = *self;
                 v
             }
         }
