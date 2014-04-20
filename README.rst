@@ -30,6 +30,8 @@ The following is a graphviz description of the disk layout::
         entity:next -> conchunk:start [ weight = 100 ];
     }
 
+(Rendered: http://i.imgur.com/ScNlxeN.png)
+
 The superblock contains the size of the filesystem, in bytes aligned to a 4K
 block. It assumes the backing store is contiguous.
 
@@ -58,3 +60,18 @@ takes an entire block, the contents of a small file can use the rest of the 4K
 that is not taken up by the inode. When the file grows larger, the inode will
 have space for many spans available to store the extent of the file's contents
 without needing to spill into a conchunk.
+
+The length field is not a single byte length, but rather split into a block
+length and a byte length. Thus a span can have much more unused space after
+its actual byte length that in can still use, besides just the amount of space
+to the furthest 4K boundary. With 32 bits for the blocks, we get that we can
+have a 16TiB span. This is insane, since the byte length could only be 2^32,
+or 4GiB. Due to this inequality (block length is multiplied by 4K), we can
+solve for this equation to get the ideal number of bits for the block length:
+
+.. math::
+
+    2^x * 4096 = 2^{64 - x}
+
+Thankfully this has an integer solution: 26. With 26 bits for the block length
+and 38 for the byte length, each can cover 256GiB.
